@@ -11,7 +11,9 @@ Rust **1.99.0** and Python **3.12.12**. No Crunch assets are used.
 Unix-socket imports and implementation to Unix platforms. Non-Unix callers
 receive an explicit `VramdError::Unavailable`; standard GPU map generation is
 unchanged. The patch is checked and applied only to verified generated sources,
-and bundled with its SHA-256 recorded in build metadata.
+isolated from parent Git repository discovery, then reverse-checked to ensure
+it actually changed the sources. It is bundled with its SHA-256 recorded in
+build metadata.
 
 ## Build and replay
 

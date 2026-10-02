@@ -182,9 +182,32 @@ class BuildTests(unittest.TestCase):
         with patch("build.run") as run:
             build.apply_patches(source)
         expected = [["git", "apply", "--check", p] for p in build.PATCHES]
-        expected += [["git", "apply", p] for p in build.PATCHES]
+        for p in build.PATCHES:
+            expected += [["git", "apply", p], ["git", "apply", "--reverse", "--check", p]]
         self.assertEqual([call.args[0] for call in run.call_args_list], expected)
         self.assertTrue(all(call.kwargs["cwd"] == source for call in run.call_args_list))
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs["env"]["GIT_CEILING_DIRECTORIES"], str(source.resolve().parent))
+
+    def test_patch_changes_sources_inside_parent_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+            source = root / "dist/materialize/sources/materialize"
+            (source / "src").mkdir(parents=True)
+            (root / ".gitignore").write_text("dist/\n", encoding="utf-8")
+            # Build a matching text fixture from the reviewed patch's old hunks.
+            lines = build.PATCHES[0].read_text(encoding="utf-8").splitlines()
+            original = "\n".join(line[1:] for line in lines
+                                 if line.startswith(" ") or (line.startswith("-") and not line.startswith("---"))) + "\n"
+            target = source / "src/vramd.rs"
+            target.write_text(original, encoding="utf-8")
+            build.apply_patches(source)
+            patched = target.read_text(encoding="utf-8")
+            self.assertNotEqual(patched, original)
+            self.assertIn("#[cfg(unix)]\nuse std::os::unix::net::UnixStream;", patched)
+            self.assertIn("#[cfg(not(unix))]\npub fn decompose_via_vramd(", patched)
+            self.assertIn("vramd Unix socket transport is unsupported", patched)
 
     def test_patch_check_failure_prevents_application(self):
         with patch("build.run", side_effect=subprocess.CalledProcessError(1, "git")) as run:

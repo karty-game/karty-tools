@@ -64,10 +64,10 @@ def generated_path(path):
     return resolved
 
 
-def run(args, cwd=None, capture=False):
+def run(args, cwd=None, capture=False, env=None):
     args = [str(arg) for arg in args]
     print("+", subprocess.list2cmdline(args), flush=True)
-    result = subprocess.run(args, cwd=cwd, check=True, text=True,
+    result = subprocess.run(args, cwd=cwd, check=True, text=True, env=env,
                             stdout=subprocess.PIPE if capture else None)
     return result.stdout if capture else None
 
@@ -149,11 +149,18 @@ def extract(archive, destination, prefix):
 
 
 def apply_patches(source):
+    # Git otherwise discovers this repository and silently skips src/* patches
+    # from a nested generated source directory. Treat that directory as a
+    # standalone tree, regardless of the caller's Git environment.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    env["GIT_CEILING_DIRECTORIES"] = str(source.resolve().parent)
     # Check every patch before modifying the checksum-verified source copy.
     for patch in PATCHES:
-        run(["git", "apply", "--check", patch], cwd=source)
+        run(["git", "apply", "--check", patch], cwd=source, env=env)
     for patch in PATCHES:
-        run(["git", "apply", patch], cwd=source)
+        run(["git", "apply", patch], cwd=source, env=env)
+        # A successful exit alone is insufficient: ensure patched content exists.
+        run(["git", "apply", "--reverse", "--check", patch], cwd=source, env=env)
 
 
 def fetch(work):
