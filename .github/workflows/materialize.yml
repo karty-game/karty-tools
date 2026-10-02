@@ -1,0 +1,98 @@
+name: Materialize build and release
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: ['materialize-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - name: Check source and shared lock pins
+        run: python -B materialize/build.py check
+      - name: Validate release tag before building
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/materialize-v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python -B materialize/build.py check --tag "$RELEASE_TAG"
+      - name: Unit tests
+        run: python -B -m unittest discover -s materialize -p 'test_*.py' -v
+      - name: Compile Python scripts
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+        run: python -m compileall -q materialize
+
+  build:
+    needs: check
+    name: Native ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: darwin-arm64
+            runner: macos-14
+          - target: windows-amd64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - name: Test build scripts on this platform
+        run: python -B -m unittest discover -s materialize -p 'test_*.py' -v
+      - name: Native build, CLI smoke and deterministic bundle (Cargo --locked)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: python -B materialize/build.py build --target "$TARGET"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: materialize-${{ matrix.target }}
+          path: dist/materialize/artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    needs: [check, build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/materialize-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: materialize-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: materialize-*
+          merge-multiple: true
+          path: dist/materialize/release
+      - name: Verify complete archive and checksum set
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python -B materialize/release.py verify --directory dist/materialize/release --tag "$RELEASE_TAG"
+      - name: Publish verified tag assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python -B materialize/release.py publish --directory dist/materialize/release --tag "$RELEASE_TAG"

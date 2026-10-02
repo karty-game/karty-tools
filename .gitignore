@@ -5,3 +5,5 @@ go.work.sum
 .codex/
 .agents/
 .vscode/mise-tools
+__pycache__/
+*.pyc

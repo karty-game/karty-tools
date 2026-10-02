@@ -1,11 +1,13 @@
 [tools]
 go = "1.27.1"
+python = "3.12.12"
+rust = "1.99.0"
 
 [tasks.test]
-run = "go test ./..."
+run = "python -B -m unittest discover -s materialize -p 'test_*.py' -v"
 
 [tasks.build]
-run = "go build ./..."
+run = "python -B materialize/build.py build"
 
 [tasks.fmt]
-run = "gofmt -w format"
+run = "python -B materialize/build.py check"

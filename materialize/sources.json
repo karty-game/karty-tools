@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "version": "2.0.0",
+  "python": "3.12.12",
+  "rust": "1.99.0",
+  "source": {
+    "repository": "https://github.com/maikramer/AiGameKit",
+    "commit": "1a3fe7d052a464d3217ef66d2bce9889d3946792",
+    "archive_sha256": "404f996ca4e3d36c668c31feec89feac578068d133f94efc6249cbb083631abc",
+    "manifest_sha256": "8e8fbfa232a4d6d2f1a9a6c671e6b1b4234570f5aa16df686e4b41caa3c4e773",
+    "subdirectory": "Materialize",
+    "binary": "materialize-cli"
+  },
+  "lock_sha256": "557c3bb559a7aa10116a9722db5a03c53c3ae6faca57581b464de46af71693c9",
+  "targets": {
+    "linux-amd64": "x86_64-unknown-linux-gnu",
+    "linux-arm64": "aarch64-unknown-linux-gnu",
+    "darwin-arm64": "aarch64-apple-darwin",
+    "windows-amd64": "x86_64-pc-windows-msvc"
+  }
+}
