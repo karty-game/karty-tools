@@ -52,7 +52,7 @@ class BuildTests(unittest.TestCase):
     def test_generated_paths(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(build, "ROOT", Path(directory)):
             root = Path(directory)
-            self.assertEqual(build.generated_path(root / "dist/work"), root / "dist/work")
+            self.assertEqual(build.generated_path(root / "dist/work"), (root / "dist/work").resolve())
             for path in (root, root / "dist", root / "source", root / "dist/../source"):
                 with self.subTest(path=path), self.assertRaises(ValueError):
                     build.generated_path(path)
@@ -63,6 +63,37 @@ class BuildTests(unittest.TestCase):
                 return  # Windows hosts without symlink privilege still exercise lexical confinement.
             with self.assertRaisesRegex(ValueError, "symlink"):
                 build.generated_path(root / "dist/link/work")
+
+    def test_generated_paths_with_parent_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve()
+            root = parent / "repository"
+            root.mkdir()
+            alias = parent / "alias"
+            try:
+                alias.symlink_to(parent, target_is_directory=True)
+            except OSError as error:
+                self.skipTest("host cannot create directory symlinks: " + str(error))
+            aliased_root = alias / "repository"
+            with patch.object(build, "ROOT", aliased_root):
+                self.assertEqual(build.generated_path(aliased_root / "dist/work"), root / "dist/work")
+                self.assertEqual(build.generated_path(root / "dist/work"), root / "dist/work")
+                (root / "dist").mkdir()
+                (root / "dist/link").symlink_to(parent, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, "symlink"):
+                    build.generated_path(aliased_root / "dist/link/work")
+
+    def test_generated_paths_reject_linked_dist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            outside = root / "outside"
+            outside.mkdir()
+            try:
+                (root / "dist").symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest("host cannot create directory symlinks: " + str(error))
+            with patch.object(build, "ROOT", root), self.assertRaisesRegex(ValueError, "symlink"):
+                build.generated_path(root / "dist/work")
 
     def archive(self, path, entries):
         with tarfile.open(path, "w:gz") as archive:

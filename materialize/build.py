@@ -39,16 +39,23 @@ def write_json(path, value):
 
 def generated_path(path):
     """Do not let work/output cleanup follow symlinks outside repository dist/."""
-    base = ROOT / "dist"
+    # System-owned parent aliases (macOS /var, Windows short names) are not
+    # links in the generated tree. Normalize only the repository root before
+    # inspecting dist and its descendants, never the candidate itself.
+    root = ROOT.absolute()
+    canonical_root = root.resolve()
+    candidate = Path(path).absolute()
+    if candidate.is_relative_to(root):
+        candidate = canonical_root / candidate.relative_to(root)
+    base = canonical_root / "dist"
     if base.resolve() != base:
         raise ValueError("dist must not be a symlink")
-    candidate = Path(path).absolute()
     if not candidate.is_relative_to(base) or candidate == base:
         raise ValueError("generated path must be below repository dist/")
     for ancestor in (candidate, *candidate.parents):
-        if ancestor == ROOT:
+        if ancestor == canonical_root:
             break
-        if ancestor.is_symlink():
+        if ancestor.is_symlink() or getattr(ancestor, "is_junction", lambda: False)():
             raise ValueError("generated path must not contain symlinks")
     resolved = candidate.resolve()
     if not resolved.is_relative_to(base) or resolved == base:
