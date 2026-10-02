@@ -20,6 +20,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 CONFIG = HERE / "sources.json"
 LOCK = HERE / "Cargo.lock"
+PATCHES = [HERE / "patches" / "vramd-platform.patch"]
 PINS = json.loads(CONFIG.read_text(encoding="utf-8"))
 MAX_ARCHIVE = 256 * 1024 * 1024
 MAX_EXTRACTED = 512 * 1024 * 1024
@@ -147,6 +148,14 @@ def extract(archive, destination, prefix):
                     shutil.copyfileobj(src, dst)
 
 
+def apply_patches(source):
+    # Check every patch before modifying the checksum-verified source copy.
+    for patch in PATCHES:
+        run(["git", "apply", "--check", patch], cwd=source)
+    for patch in PATCHES:
+        run(["git", "apply", patch], cwd=source)
+
+
 def fetch(work):
     pin = PINS["source"]
     cache = generated_path(work / "downloads")
@@ -188,6 +197,7 @@ def fetch(work):
         raise ValueError("upstream license differs from reviewed notice")
     if (destination / "Cargo.lock").exists():
         raise ValueError("upstream unexpectedly contains a lock; review lock policy")
+    apply_patches(destination)
     shutil.copyfile(LOCK, destination / "Cargo.lock")
     return destination
 
@@ -261,12 +271,14 @@ def build(work, output, target):
     shutil.copytree(HERE / "notices", bundle / "notices", dirs_exist_ok=True)
     shutil.copyfile(LOCK, bundle / "Cargo.lock")
     shutil.copyfile(CONFIG, bundle / "sources.json")
+    shutil.copytree(HERE / "patches", bundle / "patches")
     from smoke import smoke
     result = smoke(bundle / "bin", generated_path(work / "smoke" / target))
     write_json(bundle / "metadata.json", {
         "schema": 1, "tool": "materialize", "version": PINS["version"], "target": target,
         "rust_target": PINS["targets"][target], "sources_sha256": sha256(CONFIG),
         "lock_sha256": sha256(LOCK), "rustc": rustc, "smoke": result,
+        "patches": {patch.name: sha256(patch) for patch in PATCHES},
         "notice_files_missing": missing,
         "runner": {"system": platform.platform(), "image_os": os.environ.get("ImageOS"),
                    "image_version": os.environ.get("ImageVersion")}})

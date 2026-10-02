@@ -1,0 +1,48 @@
+diff --git a/src/vramd.rs b/src/vramd.rs
+--- a/src/vramd.rs
++++ b/src/vramd.rs
+@@ -7,12 +7,16 @@
+ //! worker ({"status":"ok","output":…} ou {"status":"error","error":…}).
+ //! O protocolo completo vive em `aigamekit_shared.worker_protocol` / vramd.
+ 
++#[cfg(unix)]
+ use std::io::{BufRead, BufReader, Write};
++#[cfg(unix)]
+ use std::os::unix::net::UnixStream;
+ use std::path::{Path, PathBuf};
+ use std::time::Duration;
+ 
+-use serde_json::{Value, json};
++use serde_json::Value;
++#[cfg(unix)]
++use serde_json::json;
+ 
+ /// Saídas do backend `intrinsic`.
+ #[derive(Debug, Clone)]
+@@ -79,6 +83,7 @@
+ /// Delega a decomposição intrínseca ao backend `intrinsic` do vramd.
+ ///
+ /// Bloqueante (uma linha de resposta); `timeout` cobre a leitura inteira.
++#[cfg(unix)]
+ pub fn decompose_via_vramd(
+     image_path: &Path,
+     output_dir: &Path,
+@@ -139,6 +144,18 @@
+     parse_response(line.trim())
+ }
+ 
++/// The optional vramd transport requires Unix-domain sockets.
++#[cfg(not(unix))]
++pub fn decompose_via_vramd(
++    _image_path: &Path,
++    _output_dir: &Path,
++    _timeout: Duration,
++) -> Result<IntrinsicPaths, VramdError> {
++    Err(VramdError::Unavailable(
++        "vramd Unix socket transport is unsupported on this platform".to_string(),
++    ))
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;

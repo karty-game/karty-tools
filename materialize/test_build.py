@@ -175,6 +175,24 @@ class BuildTests(unittest.TestCase):
             build.cargo("build", "--locked")
             run.assert_called_once_with(["cargo", "+1.99.0", "build", "--locked"], cwd=None, capture=False)
 
+    def test_patches_checked_before_application(self):
+        for path in build.PATCHES:
+            self.assertTrue(path.read_bytes().endswith(b"\n"), path.name)
+        source = Path("fixture")
+        with patch("build.run") as run:
+            build.apply_patches(source)
+        expected = [["git", "apply", "--check", p] for p in build.PATCHES]
+        expected += [["git", "apply", p] for p in build.PATCHES]
+        self.assertEqual([call.args[0] for call in run.call_args_list], expected)
+        self.assertTrue(all(call.kwargs["cwd"] == source for call in run.call_args_list))
+
+    def test_patch_check_failure_prevents_application(self):
+        with patch("build.run", side_effect=subprocess.CalledProcessError(1, "git")) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                build.apply_patches(Path("fixture"))
+        self.assertEqual(run.call_count, 1)
+        self.assertIn("--check", run.call_args.args[0])
+
     def test_smoke_cli_no_gpu(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(build, "ROOT", Path(directory)):
             root = Path(directory)
@@ -221,10 +239,12 @@ class ReleaseTests(unittest.TestCase):
             shutil.copyfile(build.CONFIG, bundle / "sources.json")
             shutil.copyfile(build.LOCK, bundle / "Cargo.lock")
             shutil.copytree(build.HERE / "notices", bundle / "notices")
+            shutil.copytree(build.HERE / "patches", bundle / "patches")
             build.write_json(bundle / "rust-dependencies.json", [])
             build.write_json(bundle / "metadata.json", {
                 "tool": "materialize", "target": target, "version": build.PINS["version"],
                 "rust_target": build.PINS["targets"][target], "lock_sha256": build.PINS["lock_sha256"],
+                "patches": {p.name: build.sha256(p) for p in build.PATCHES},
                 "sources_sha256": build.sha256(build.CONFIG), "smoke": {"cli": "help/version/list-maps executed"}})
             build.bundle_zip(bundle, directory / f"materialize-{build.PINS['version']}-{target}.zip")
 
@@ -250,6 +270,18 @@ class ReleaseTests(unittest.TestCase):
             next(directory.glob("*linux-arm64.zip")).unlink()
             with self.assertRaisesRegex(ValueError, "all four"):
                 release.verify(directory, "materialize-v2.0.0")
+
+    def test_tampered_compatibility_patch_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(build, "ROOT", Path(temporary)):
+            directory = Path(temporary) / "dist/release"
+            directory.mkdir(parents=True)
+            self.make_release(directory)
+            bundle = directory.parent / "bundle-windows-amd64"
+            (bundle / "patches" / build.PATCHES[0].name).write_bytes(b"tampered")
+            archive = directory / f"materialize-{build.PINS['version']}-windows-amd64.zip"
+            build.bundle_zip(bundle, archive)
+            with self.assertRaisesRegex(ValueError, "compatibility patch mismatch"):
+                release.verify_archive(archive, "windows-amd64")
 
     def test_internal_hash_rejected(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(build, "ROOT", Path(temporary)):

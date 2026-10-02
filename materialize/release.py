@@ -40,12 +40,16 @@ def verify_archive(path, target):
             raise ValueError("bundle source/lock identity mismatch")
         if archive.read("notices/Materialize-LICENSE") != (build.HERE / "notices/Materialize-LICENSE").read_bytes():
             raise ValueError("bundle upstream notice mismatch")
+        for patch in build.PATCHES:
+            if archive.read("patches/" + patch.name) != patch.read_bytes():
+                raise ValueError("bundle compatibility patch mismatch")
         metadata = json.loads(archive.read("metadata.json"))
         if (metadata["tool"] != "materialize" or metadata["target"] != target
                 or metadata["version"] != build.PINS["version"]
                 or metadata["rust_target"] != build.PINS["targets"][target]
                 or metadata["lock_sha256"] != build.PINS["lock_sha256"]
                 or metadata["sources_sha256"] != build.sha256(build.CONFIG)
+                or metadata.get("patches") != {p.name: build.sha256(p) for p in build.PATCHES}
                 or metadata["smoke"]["cli"] != "help/version/list-maps executed"):
             raise ValueError("bundle provenance mismatch")
 

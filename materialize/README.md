@@ -5,7 +5,13 @@ Unity application or the separate repository mentioned by its Cargo manifest.
 [sources.json](sources.json) pins upstream commit
 `1a3fe7d052a464d3217ef66d2bce9889d3946792`, archive SHA-256
 `404f996ca4e3d36c668c31feec89feac578068d133f94efc6249cbb083631abc`,
-Rust **1.99.0** and Python **3.12.12**. No patches or Crunch assets are used.
+Rust **1.99.0** and Python **3.12.12**. No Crunch assets are used.
+
+[vramd-platform.patch](patches/vramd-platform.patch) gates the optional vramd
+Unix-socket imports and implementation to Unix platforms. Non-Unix callers
+receive an explicit `VramdError::Unavailable`; standard GPU map generation is
+unchanged. The patch is checked and applied only to verified generated sources,
+and bundled with its SHA-256 recorded in build metadata.
 
 ## Build and replay
 
