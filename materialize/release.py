@@ -83,7 +83,6 @@ def publish(directory, tag):
         raise ValueError("publication requires a GitHub Actions tag push")
     assets = verify(directory, tag)
     repository = os.environ["GITHUB_REPOSITORY"]
-    commit = os.environ["GITHUB_SHA"]
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("invalid GitHub repository")
     notes = ("Native Materialize developer tools. CLI help/version/list-maps passed on all four runners. "
@@ -92,7 +91,9 @@ def publish(directory, tag):
     def gh(*args):
         subprocess.run(["gh", "release", *map(str, args), "--repo", repository], check=True)
     # Create fails if a release already exists; never overwrite immutable assets.
-    gh("create", tag, "--verify-tag", "--target", commit, "--draft", "--title", tag, "--notes", notes)
+    # The tag already exists. Do not send target_commitish: GitHub can require
+    # additional workflow permissions when an explicit target is supplied.
+    gh("create", tag, "--verify-tag", "--draft", "--title", tag, "--notes", notes)
     gh("upload", tag, *assets)
     gh("edit", tag, "--draft=false")
 

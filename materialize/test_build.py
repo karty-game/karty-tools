@@ -338,6 +338,8 @@ class ReleaseTests(unittest.TestCase):
                 release.publish(Path("unused"), "materialize-v2.0.0")
                 self.assertEqual([call.args[0][2] for call in run.call_args_list], ["create", "upload", "edit"])
                 self.assertIn("--draft", run.call_args_list[0].args[0])
+                self.assertIn("--verify-tag", run.call_args_list[0].args[0])
+                self.assertNotIn("--target", run.call_args_list[0].args[0])
                 self.assertNotIn("--clobber", str(run.call_args_list))
 
 
