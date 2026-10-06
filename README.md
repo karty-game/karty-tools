@@ -17,5 +17,6 @@ GPU map generation is a separate, optional runtime check, not a compilation clai
 
 `windows-arm64` and `darwin-amd64` are **unsupported developer tool targets**.
 These requirements are distinct from Karty game-runtime targets, including
-Windows ARM64 and browser/WASM; this repository does not build game hosts. Original CLI scaffolding remains untouched pending
-explicit cleanup; this repository's builds do not read it.
+Windows ARM64 and browser/WASM; this repository does not build game hosts.
+Native tool builds and releases live here. The CLI installs SDK-pinned release
+artifacts; its former source-build scaffolding has been removed.
